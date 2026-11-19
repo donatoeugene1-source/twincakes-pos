@@ -109,6 +109,14 @@
         margin: 4mm;
       }
 
+      header,
+      main,
+      .receipt-edge-top,
+      .receipt-edge-bottom,
+      .no-print {
+        display: none !important;
+      }
+
       html, body {
         width: 100% !important;
         height: auto !important;
@@ -118,31 +126,23 @@
         overflow: visible !important;
       }
 
-      body * {
-        visibility: hidden;
-      }
-
-      #printable-receipt-sheet,
-      #printable-receipt-sheet * {
-        visibility: visible;
+      #receipt-preview-modal {
+        display: block !important;
+        position: static !important;
+        background: transparent !important;
+        padding: 0 !important;
+        margin: 0 !important;
       }
 
       #printable-receipt-sheet {
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
+        display: block !important;
+        position: relative !important;
         width: 100% !important;
-        max-width: 100% !important;
-        margin: 0 !important;
-        padding: 8px !important;
+        max-width: 80mm !important;
+        margin: 0 auto !important;
+        padding: 6px !important;
         box-shadow: none !important;
         overflow: visible !important;
-      }
-
-      .receipt-edge-top,
-      .receipt-edge-bottom,
-      .no-print {
-        display: none !important;
       }
     }
 

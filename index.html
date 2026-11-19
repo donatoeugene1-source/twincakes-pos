@@ -1,0 +1,2068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>TwinCakes — Bakery &amp; Cookie POS</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- SheetJS (XLSX) for multi-sheet Excel export -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+  <!-- Google Fonts: Plus Jakarta Sans & Courier Prime for authentic thermal receipt typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"Courier Prime"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+          },
+          colors: {
+            cocoa: {
+              900: '#3E2723',
+              800: '#4E342E',
+              700: '#5D4037',
+              600: '#6D4C41',
+            },
+            pastelpink: {
+              100: '#FFF0F5',
+              200: '#FADADD',
+              300: '#F8C8DC',
+              400: '#F2A6C3',
+              500: '#E57A9F',
+            },
+            cream: {
+              50: '#FFFBF7',
+              100: '#F7F1EB',
+              200: '#EFE5DC',
+            },
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      background-color: #FFFBF7;
+      color: #3E2723;
+      overscroll-behavior-y: none;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Serrated Thermal Paper Edges */
+    .receipt-edge-top {
+      height: 12px;
+      width: 100%;
+      background-image: linear-gradient(135deg, transparent 50%, #ffffff 50%),
+                        linear-gradient(225deg, transparent 50%, #ffffff 50%);
+      background-position: top left;
+      background-size: 16px 12px;
+      background-repeat: repeat-x;
+    }
+
+    .receipt-edge-bottom {
+      height: 12px;
+      width: 100%;
+      background-image: linear-gradient(45deg, transparent 50%, #ffffff 50%),
+                        linear-gradient(315deg, transparent 50%, #ffffff 50%);
+      background-position: bottom left;
+      background-size: 16px 12px;
+      background-repeat: repeat-x;
+    }
+
+    /* Clean subtle scrollbars */
+    .nice-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .nice-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .nice-scroll::-webkit-scrollbar-thumb {
+      background: rgba(93, 64, 55, 0.22);
+      border-radius: 9999px;
+    }
+    .nice-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(93, 64, 55, 0.4);
+    }
+
+    /* Thermal Print Styles */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printable-receipt-sheet,
+      #printable-receipt-sheet * {
+        visibility: visible;
+      }
+      #printable-receipt-sheet {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 80mm;
+        padding: 8px;
+        box-shadow: none !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- ===================================================================== -->
+  <!-- PASTEL PINK TOP NAVIGATION BAR WITH TWINCAKES TWINS LOGO              -->
+  <!-- ===================================================================== -->
+  <header class="bg-gradient-to-r from-[#FADADD] via-[#FBE3E8] to-[#F8C8DC] border-b border-[#F2A6C3] px-4 sm:px-6 py-2.5 sticky top-0 z-30 shadow-xs text-[#3E2723]">
+    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand Identity -->
+      <div class="flex items-center gap-3">
+        <div class="w-14 h-12 rounded-2xl bg-white border-2 border-[#F2A6C3] shadow-xs flex items-center justify-center p-1 shrink-0" id="header-logo-slot">
+          <!-- Injected cleanly via JS renderTwinCakesLogo() -->
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-[#3E2723] leading-none">TwinCakes</h1>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-white/85 text-[#8E3557] border border-[#F2A6C3]">iPad POS</span>
+          </div>
+          <p class="text-xs font-semibold text-[#6D4C41] mt-0.5">Bakery &amp; Cookie POS</p>
+        </div>
+      </div>
+
+      <!-- View Switcher Tabs -->
+      <nav class="flex items-center bg-white/70 backdrop-blur-xs p-1 rounded-2xl border border-[#F2A6C3]" role="tablist">
+        <button
+          type="button"
+          id="nav-btn-pos"
+          onclick="switchView('pos')"
+          class="min-h-[44px] px-4 sm:px-5 rounded-xl text-sm font-extrabold flex items-center gap-2 transition-all bg-white text-[#3E2723] shadow-xs border border-[#F2A6C3]/70"
+        >
+          <svg class="w-4 h-4 text-[#D95384]" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+          </svg>
+          <span>POS Register</span>
+        </button>
+
+        <button
+          type="button"
+          id="nav-btn-history"
+          onclick="switchView('history')"
+          class="min-h-[44px] px-4 sm:px-5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all text-[#5D4037] hover:text-[#3E2723]"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          <span>Receipt History &amp; Excel</span>
+          <span id="nav-history-count" class="px-2 py-0.5 text-xs font-mono font-bold rounded-full bg-[#FADADD] text-[#3E2723] border border-[#F2A6C3]">0</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- VIEW 1: SPLIT-SCREEN IPAD POS REGISTER                                -->
+  <!-- ===================================================================== -->
+  <main id="view-pos" class="flex-1 max-w-[1600px] w-full mx-auto flex flex-col lg:flex-row overflow-hidden">
+
+    <!-- LEFT PANE: PRODUCT MENU & LIVE CATALOG EDITOR -->
+    <section class="flex-1 flex flex-col p-4 sm:p-6 overflow-y-auto nice-scroll">
+      <!-- Top Controls Row -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-xl font-extrabold text-[#3E2723]">Menu Items</h2>
+          <p id="menu-helper-text" class="text-xs sm:text-sm text-[#6D4C41]">Tap any item to add it to the customer receipt tally.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+          <!-- Add Product Button -->
+          <button
+            type="button"
+            onclick="openAddProductModal()"
+            class="min-h-[44px] px-4 rounded-xl bg-[#3E2723] hover:bg-[#4E342E] active:scale-95 text-white text-sm font-bold flex items-center gap-1.5 shadow-xs transition"
+          >
+            <span class="text-lg leading-none">+</span>
+            <span>Add New Product</span>
+          </button>
+
+          <!-- Edit Catalog Toggle Button -->
+          <button
+            type="button"
+            id="btn-toggle-edit"
+            onclick="toggleEditCatalogMode()"
+            class="min-h-[44px] px-4 rounded-xl border border-[#E6D7CC] bg-white hover:bg-[#F7F1EB] active:scale-95 text-[#3E2723] text-sm font-bold flex items-center gap-2 transition"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+            <span id="btn-toggle-edit-text">Edit Catalog</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Category Filter Pills & Menu Search -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+        <div id="category-pills-container" class="flex items-center gap-2 overflow-x-auto pb-1 nice-scroll">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div class="relative sm:w-64 shrink-0">
+          <svg class="w-4 h-4 text-[#8D6E63] absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <input
+            id="pos-menu-search"
+            type="text"
+            oninput="renderMenuGrid()"
+            placeholder="Search cookies or drinks..."
+            class="w-full min-h-[44px] pl-10 pr-3 rounded-xl border border-[#E6D7CC] bg-white text-sm font-medium text-[#3E2723] placeholder-[#A1887F] focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+          />
+        </div>
+      </div>
+
+      <!-- Edit Mode Helper Banner -->
+      <div id="edit-catalog-banner" class="hidden mb-4 p-3.5 rounded-2xl bg-[#FFF0F5] border border-[#F2A6C3] text-[#3E2723] text-xs sm:text-sm flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#D95384] animate-pulse"></span>
+          <span><strong>Edit Catalog Mode:</strong> Edit product names, prices (₱), categories, or upload a new photo directly on any card below.</span>
+        </div>
+        <button type="button" onclick="toggleEditCatalogMode()" class="px-3.5 py-1.5 rounded-xl bg-[#3E2723] text-white text-xs font-bold hover:bg-[#4E342E]">
+          Finish Editing
+        </button>
+      </div>
+
+      <!-- Product Grid -->
+      <div id="menu-grid" class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3.5 sm:gap-4 pb-8">
+        <!-- Product cards injected via JS -->
+      </div>
+    </section>
+
+    <!-- RIGHT PANE: FAST-FOOD THERMAL RECEIPT TALLY -->
+    <aside class="w-full lg:w-[420px] xl:w-[450px] bg-[#F7F1EB] border-t lg:border-t-0 lg:border-l border-[#E6D7CC] p-4 sm:p-5 flex flex-col">
+      <div class="flex flex-col flex-1 min-h-0 lg:max-h-[calc(100vh-105px)]">
+        <!-- Serrated Top -->
+        <div class="receipt-edge-top shrink-0"></div>
+
+        <!-- Thermal Paper Body -->
+        <div class="bg-white shadow-md px-5 py-4 flex flex-col flex-1 min-h-0">
+          <!-- Receipt Top Header -->
+          <div class="text-center border-b border-dashed border-stone-300 pb-3 shrink-0">
+            <div class="flex items-center justify-between font-mono text-xs text-stone-500 mb-1">
+              <span id="receipt-live-number" class="font-bold text-[#3E2723]">#TC-1001</span>
+              <span id="receipt-live-datetime">--</span>
+            </div>
+
+            <div class="flex items-center justify-center gap-2 my-0.5">
+              <div class="w-9 h-7 shrink-0" id="receipt-header-logo-slot"></div>
+              <h3 class="font-mono font-bold text-lg tracking-widest uppercase text-[#3E2723]">TWINCAKES</h3>
+            </div>
+            <p class="font-mono text-[11px] text-stone-500 tracking-wide">BAKERY &amp; COOKIE POS • ORDER TALLY</p>
+          </div>
+
+          <!-- Customer / Order Tag Input -->
+          <div class="py-2.5 border-b border-dashed border-stone-300 shrink-0">
+            <label for="order-customer-input" class="block font-mono text-[11px] font-bold uppercase text-stone-500 mb-1">
+              Customer / Order Name (Optional)
+            </label>
+            <input
+              id="order-customer-input"
+              type="text"
+              placeholder="e.g., Table 2, Anna, Grab"
+              class="w-full min-h-[42px] px-3 rounded-xl bg-[#FFFBF7] border border-[#E6D7CC] text-sm font-semibold text-[#3E2723] placeholder-[#A1887F] focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+            />
+          </div>
+
+          <!-- Tally Column Header -->
+          <div class="flex items-center justify-between font-mono text-[11px] font-bold uppercase text-stone-400 pt-2.5 pb-1.5 border-b border-stone-200 shrink-0">
+            <span>Qty &amp; Item</span>
+            <div class="flex items-center gap-3">
+              <span>Line Total</span>
+              <button
+                type="button"
+                id="btn-clear-order"
+                onclick="clearActiveOrder()"
+                class="hidden font-sans normal-case text-xs font-bold text-rose-600 hover:text-rose-700 underline"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <!-- Scrollable Itemized Tally List -->
+          <div id="receipt-tally-list" class="flex-1 overflow-y-auto nice-scroll divide-y divide-dashed divide-stone-200 my-1 pr-1">
+            <!-- Cart items or empty state injected via JS -->
+          </div>
+
+          <!-- Totals, Optional Discount/VAT & Grand Total -->
+          <div class="border-t-2 border-dashed border-stone-300 pt-3 mt-1 space-y-2 font-mono shrink-0">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-stone-600 font-bold">TOTAL ITEMS</span>
+              <span id="tally-total-pcs" class="px-2.5 py-0.5 rounded-full bg-[#FADADD] text-[#3E2723] font-bold tabular-nums">0 pcs</span>
+            </div>
+
+            <div class="flex items-center justify-between text-xs text-stone-600">
+              <span>SUBTOTAL</span>
+              <span id="tally-subtotal" class="font-bold tabular-nums">₱0.00</span>
+            </div>
+
+            <!-- Optional Discount (₱) & 12% VAT Controls -->
+            <div class="pt-1 border-t border-stone-100 space-y-1.5 text-xs">
+              <div class="flex items-center justify-between gap-2 text-stone-600">
+                <label for="order-discount-input" class="cursor-pointer">DISCOUNT (₱)</label>
+                <input
+                  id="order-discount-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value="0"
+                  oninput="renderReceiptTally()"
+                  class="w-24 min-h-[34px] px-2 text-right rounded-lg border border-[#E6D7CC] bg-[#FFFBF7] font-mono font-bold text-[#3E2723] focus:outline-none focus:ring-1 focus:ring-[#E57A9F]"
+                />
+              </div>
+
+              <div class="flex items-center justify-between text-stone-600">
+                <label class="inline-flex items-center gap-2 cursor-pointer select-none min-h-[32px]">
+                  <input
+                    id="order-vat-checkbox"
+                    type="checkbox"
+                    onchange="renderReceiptTally()"
+                    class="w-4 h-4 rounded accent-[#D95384] cursor-pointer"
+                  />
+                  <span>ADD 12% VAT</span>
+                </label>
+                <span id="tally-vat-amount" class="tabular-nums">₱0.00</span>
+              </div>
+            </div>
+
+            <div class="flex items-baseline justify-between pt-2 border-t-2 border-[#3E2723] text-[#3E2723]">
+              <span class="text-sm font-bold tracking-tight">GRAND TOTAL</span>
+              <span id="tally-grand-total" class="text-2xl font-bold tabular-nums">₱0.00</span>
+            </div>
+          </div>
+
+          <!-- Primary Complete & Print Receipt Button -->
+          <div class="pt-3.5 shrink-0">
+            <button
+              type="button"
+              id="btn-complete-order"
+              onclick="completeAndPrintOrder()"
+              disabled
+              class="w-full min-h-[54px] rounded-2xl bg-[#3E2723] hover:bg-[#4E342E] disabled:bg-stone-300 disabled:text-stone-500 disabled:cursor-not-allowed text-white font-extrabold text-base tracking-wide shadow-md active:scale-[0.99] transition flex items-center justify-center gap-2.5"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>Complete &amp; Print Receipt</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Serrated Bottom -->
+        <div class="receipt-edge-bottom shrink-0"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- VIEW 2: RECEIPT HISTORY, ITEM SEARCH & EXCEL (.XLSX) EXPORT           -->
+  <!-- ===================================================================== -->
+  <main id="view-history" class="hidden flex-1 max-w-[1440px] w-full mx-auto p-4 sm:p-6 space-y-5">
+    <!-- Top Header & Excel Export Action -->
+    <div class="bg-white rounded-2xl border border-[#E6D7CC] p-5 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div>
+        <h2 class="text-xl sm:text-2xl font-extrabold text-[#3E2723]">Receipt History &amp; Sales Report</h2>
+        <p class="text-sm text-[#6D4C41] mt-0.5">Search past orders by customer, receipt #, or specific cookie flavors, and export to Excel.</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onclick="openResetDemoConfirm()"
+          class="min-h-[48px] px-4 rounded-xl border border-[#E6D7CC] bg-[#FFFBF7] hover:bg-[#F7F1EB] active:scale-95 text-[#6D4C41] font-bold text-xs sm:text-sm transition"
+        >
+          Reset Demo Data
+        </button>
+
+        <button
+          type="button"
+          onclick="exportToExcelWorkbook()"
+          class="min-h-[48px] px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-sm shadow-sm flex items-center gap-2.5 transition"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span>Export to Excel (.xlsx)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Top Summary KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="bg-white rounded-2xl border border-[#E6D7CC] p-5 shadow-xs">
+        <p class="text-xs font-bold uppercase tracking-wider text-[#8D6E63]">Total Revenue</p>
+        <p id="kpi-total-revenue" class="text-2xl sm:text-3xl font-extrabold text-[#3E2723] mt-1 tabular-nums">₱0.00</p>
+      </div>
+      <div class="bg-white rounded-2xl border border-[#E6D7CC] p-5 shadow-xs">
+        <p class="text-xs font-bold uppercase tracking-wider text-[#8D6E63]">Total Orders</p>
+        <p id="kpi-total-orders" class="text-2xl sm:text-3xl font-extrabold text-[#3E2723] mt-1 tabular-nums">0</p>
+      </div>
+      <div class="bg-white rounded-2xl border border-[#E6D7CC] p-5 shadow-xs">
+        <p class="text-xs font-bold uppercase tracking-wider text-[#8D6E63]">Total Pastries Sold</p>
+        <p id="kpi-total-pastries" class="text-2xl sm:text-3xl font-extrabold text-[#D95384] mt-1 tabular-nums">0 pcs</p>
+      </div>
+    </div>
+
+    <!-- Search & Date Filter Controls -->
+    <div class="bg-white rounded-2xl border border-[#E6D7CC] p-4 space-y-3 shadow-xs">
+      <div class="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+        <!-- Search across Receipt #, Customer, Date, and Product/Cookie Names -->
+        <div class="relative flex-1">
+          <svg class="w-5 h-5 text-[#8D6E63] absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <input
+            id="history-search-box"
+            type="text"
+            oninput="renderHistoryView()"
+            placeholder="Search cookie flavor (e.g., Matcha, Red Velvet), customer name, or #TC-1001..."
+            class="w-full min-h-[46px] pl-11 pr-10 rounded-xl border border-[#E6D7CC] bg-[#FFFBF7] text-sm font-semibold text-[#3E2723] placeholder-[#A1887F] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+          />
+          <button
+            type="button"
+            id="btn-clear-history-search"
+            onclick="clearHistorySearchInput()"
+            class="hidden absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full hover:bg-stone-200 text-stone-500 flex items-center justify-center text-xs font-bold"
+            title="Clear search"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Date Filter Controls: All Time, Today, Specific Date -->
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <div class="flex items-center bg-[#F7F1EB] p-1 rounded-xl border border-[#E6D7CC]">
+            <button
+              type="button"
+              id="date-filter-all"
+              onclick="setHistoryDateMode('all')"
+              class="min-h-[38px] px-3.5 rounded-lg text-xs font-extrabold bg-white text-[#3E2723] shadow-xs transition"
+            >
+              All Time
+            </button>
+            <button
+              type="button"
+              id="date-filter-today"
+              onclick="setHistoryDateMode('today')"
+              class="min-h-[38px] px-3.5 rounded-lg text-xs font-bold text-[#6D4C41] hover:text-[#3E2723] transition"
+            >
+              Today
+            </button>
+          </div>
+
+          <input
+            id="history-specific-date"
+            type="date"
+            onchange="setHistoryDateMode('specific')"
+            aria-label="Filter by specific date"
+            class="min-h-[46px] px-3 rounded-xl border border-[#E6D7CC] bg-[#FFFBF7] text-xs font-bold text-[#3E2723] focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+          />
+        </div>
+      </div>
+
+      <!-- Dynamic Quick-Filter Flavor Chips -->
+      <div id="flavor-chips-bar" class="flex items-center gap-2 overflow-x-auto pt-1 pb-0.5 nice-scroll">
+        <!-- Populated dynamically from sold/catalog items -->
+      </div>
+    </div>
+
+    <!-- Detailed Receipt History Cards -->
+    <div id="history-orders-list" class="space-y-3 pb-12">
+      <!-- Populated dynamically -->
+    </div>
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 1: ADD NEW PRODUCT MODAL                                        -->
+  <!-- ===================================================================== -->
+  <div id="add-product-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-[#3E2723]/60 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-[#E6D7CC] overflow-hidden">
+      <div class="px-6 py-4 bg-[#FADADD]/60 border-b border-[#F2A6C3] flex items-center justify-between">
+        <h3 class="text-lg font-extrabold text-[#3E2723]">Add New Menu Product</h3>
+        <button type="button" onclick="closeAddProductModal()" class="w-9 h-9 rounded-full bg-white/80 hover:bg-white text-[#3E2723] flex items-center justify-center font-bold">✕</button>
+      </div>
+
+      <form onsubmit="submitNewProduct(event)" class="p-6 space-y-4">
+        <!-- Photo Preview & Upload -->
+        <div class="flex items-center gap-4">
+          <div class="w-24 h-24 rounded-2xl bg-[#FFFBF7] border border-[#E6D7CC] overflow-hidden shrink-0">
+            <img id="new-prod-preview" src="" alt="New Product Preview" class="w-full h-full object-cover" />
+          </div>
+          <div class="flex-1 space-y-2">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[#6D4C41]">Product Photo</label>
+            <label class="min-h-[44px] px-3.5 rounded-xl bg-[#FFF0F5] hover:bg-[#FADADD] text-[#3E2723] border border-[#F2A6C3] text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer transition">
+              <svg class="w-4 h-4 text-[#D95384]" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span>Upload Photo / Camera</span>
+              <input type="file" accept="image/*" onchange="handleNewProductFile(event)" class="hidden" />
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label for="new-prod-url" class="block text-xs font-bold text-[#6D4C41] mb-1">Or Image URL (Optional)</label>
+          <input
+            id="new-prod-url"
+            type="text"
+            oninput="previewNewProductUrl(this.value)"
+            placeholder="https://..."
+            class="w-full min-h-[42px] px-3 rounded-xl border border-[#E6D7CC] text-sm focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+          />
+        </div>
+
+        <div>
+          <label for="new-prod-name" class="block text-xs font-bold text-[#6D4C41] mb-1">Product Name *</label>
+          <input
+            id="new-prod-name"
+            type="text"
+            required
+            placeholder="e.g., S'mores Campfire Cookie"
+            class="w-full min-h-[44px] px-3 rounded-xl border border-[#E6D7CC] text-sm font-bold text-[#3E2723] focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+          />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="new-prod-price" class="block text-xs font-bold text-[#6D4C41] mb-1">Price (₱) *</label>
+            <input
+              id="new-prod-price"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+              placeholder="95.00"
+              class="w-full min-h-[44px] px-3 rounded-xl border border-[#E6D7CC] text-sm font-mono font-bold text-[#3E2723] focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+            />
+          </div>
+
+          <div>
+            <label for="new-prod-category" class="block text-xs font-bold text-[#6D4C41] mb-1">Category</label>
+            <select
+              id="new-prod-category"
+              class="w-full min-h-[44px] px-3 rounded-xl border border-[#E6D7CC] bg-white text-sm font-bold text-[#3E2723] focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+            >
+              <option value="Cookies">Cookies</option>
+              <option value="Brownies & Bars">Brownies &amp; Bars</option>
+              <option value="Drinks">Drinks</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-3 flex items-center justify-end gap-2.5 border-t border-[#F7F1EB]">
+          <button
+            type="button"
+            onclick="closeAddProductModal()"
+            class="min-h-[44px] px-4 rounded-xl border border-[#E6D7CC] text-[#6D4C41] font-bold text-sm hover:bg-[#F7F1EB]"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="min-h-[44px] px-5 rounded-xl bg-[#3E2723] hover:bg-[#4E342E] text-white font-extrabold text-sm shadow-xs"
+          >
+            Save to Menu
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 2: ORDER COMPLETED / THERMAL RECEIPT PREVIEW & PRINT MODAL      -->
+  <!-- ===================================================================== -->
+  <div id="receipt-preview-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-[#3E2723]/65 backdrop-blur-xs p-4">
+    <div class="max-w-sm w-full flex flex-col max-h-[92vh]">
+      <div class="receipt-edge-top shrink-0"></div>
+
+      <div id="printable-receipt-sheet" class="bg-white px-6 py-5 overflow-y-auto nice-scroll font-mono text-[#3E2723] shadow-2xl">
+        <div class="text-center border-b border-dashed border-stone-300 pb-3">
+          <div class="inline-flex items-center justify-center w-16 h-12 rounded-2xl bg-[#FFF0F5] border border-[#F2A6C3] mb-1.5 p-1" id="modal-receipt-logo-slot"></div>
+          <h3 class="font-bold text-lg tracking-widest uppercase">TWINCAKES</h3>
+          <p class="text-[11px] text-stone-500">BAKERY &amp; COOKIE POS</p>
+          <p id="modal-receipt-timestamp" class="text-[11px] text-stone-500 mt-1">--</p>
+        </div>
+
+        <div class="py-2.5 border-b border-dashed border-stone-300 text-xs space-y-1">
+          <div class="flex justify-between">
+            <span class="text-stone-500">RECEIPT #:</span>
+            <span id="modal-receipt-num" class="font-bold">#TC-1001</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-stone-500">CUSTOMER:</span>
+            <span id="modal-receipt-cust" class="font-bold">Walk-in Guest</span>
+          </div>
+        </div>
+
+        <div id="modal-receipt-lines" class="py-3 border-b border-dashed border-stone-300 space-y-2 text-xs">
+          <!-- Line items injected via JS -->
+        </div>
+
+        <div class="pt-3 space-y-1 text-xs">
+          <div class="flex justify-between text-stone-600">
+            <span>TOTAL ITEMS</span>
+            <span id="modal-receipt-pcs" class="font-bold">0 pcs</span>
+          </div>
+          <div class="flex justify-between text-stone-600">
+            <span>SUBTOTAL</span>
+            <span id="modal-receipt-sub">₱0.00</span>
+          </div>
+          <div id="modal-receipt-disc-row" class="hidden flex justify-between text-emerald-700">
+            <span>DISCOUNT</span>
+            <span id="modal-receipt-disc">-₱0.00</span>
+          </div>
+          <div id="modal-receipt-vat-row" class="hidden flex justify-between text-stone-600">
+            <span>12% VAT</span>
+            <span id="modal-receipt-vat">₱0.00</span>
+          </div>
+          <div class="flex justify-between text-base font-bold pt-2 border-t-2 border-[#3E2723] mt-1">
+            <span>GRAND TOTAL</span>
+            <span id="modal-receipt-total">₱0.00</span>
+          </div>
+        </div>
+
+        <div class="text-center mt-5 pt-3 border-t border-dashed border-stone-300 text-[11px] text-stone-500">
+          <p>THANK YOU FOR SWEETENING YOUR DAY</p>
+          <p class="mt-0.5">WITH TWINCAKES!</p>
+        </div>
+      </div>
+
+      <div class="receipt-edge-bottom shrink-0"></div>
+
+      <div class="mt-3 flex items-center gap-2.5 no-print">
+        <button
+          type="button"
+          onclick="window.print()"
+          class="flex-1 min-h-[48px] rounded-2xl bg-white hover:bg-[#FFFBF7] text-[#3E2723] font-extrabold text-sm shadow-md flex items-center justify-center gap-2 transition"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          <span>Print Receipt</span>
+        </button>
+
+        <button
+          type="button"
+          onclick="closeReceiptPreviewModal()"
+          class="flex-1 min-h-[48px] rounded-2xl bg-[#3E2723] hover:bg-[#4E342E] text-white font-extrabold text-sm shadow-md transition"
+        >
+          New Order
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 3: CUSTOM CONFIRMATION MODAL (No browser confirm() / alert())   -->
+  <!-- ===================================================================== -->
+  <div id="custom-confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-[#3E2723]/60 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E6D7CC] space-y-4">
+      <h3 id="confirm-title" class="text-lg font-extrabold text-[#3E2723]">Confirm Action</h3>
+      <p id="confirm-message" class="text-sm text-[#6D4C41]">Are you sure?</p>
+      <div class="flex items-center justify-end gap-2.5 pt-2">
+        <button
+          type="button"
+          onclick="closeConfirmDialog()"
+          class="min-h-[44px] px-4 rounded-xl border border-[#E6D7CC] text-[#6D4C41] font-bold text-sm hover:bg-[#F7F1EB]"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          id="confirm-proceed-btn"
+          class="min-h-[44px] px-5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-sm shadow-xs"
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Pill -->
+  <div id="toast-banner" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 translate-y-2 transition-all duration-200">
+    <div class="px-5 py-2.5 rounded-full bg-[#3E2723] text-white text-xs sm:text-sm font-bold shadow-lg">
+      <span id="toast-text">Saved!</span>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. CUSTOM INLINE SVG: TWINCAKES TWINS EATING COOKIES LOGO
+    // =========================================================================
+    function getTwinCakesLogoSVG(strokeColor = '#141112') {
+      return `
+        <svg class="w-full h-full" viewBox="0 0 120 92" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="TwinCakes Twins Eating Cookies Logo">
+          <!-- Left Twin Ear -->
+          <path d="M17 44C11 44 10 54 17 55" stroke="${strokeColor}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- Left Twin Head -->
+          <path d="M18 41C17 58 24 68 38 68C49 68 54 60 54 46" fill="#FFFFFF" stroke="${strokeColor}" stroke-width="4.2" stroke-linecap="round"/>
+          <!-- Left Twin Bowl-Cut Hair + Tuft -->
+          <path d="M33 15L36 10M37 15L41 11" stroke="${strokeColor}" stroke-width="3.6" stroke-linecap="round"/>
+          <path d="M16 42C16 23 26 14 40 14C48 14 54 18 57 24C52 29 50 35 50 41C46 43 42 40 38 40C34 40 31 43 27 42C23 41 19 43 16 42Z" fill="${strokeColor}" stroke="${strokeColor}" stroke-width="3.2" stroke-linejoin="round"/>
+          <!-- Left Twin Vertical Oval Eyes -->
+          <line x1="28" y1="48" x2="28" y2="53" stroke="${strokeColor}" stroke-width="4.2" stroke-linecap="round"/>
+          <line x1="42" y1="48" x2="42" y2="53" stroke="${strokeColor}" stroke-width="4.2" stroke-linecap="round"/>
+          <!-- Left Twin Chewing Mouth + Cookie Crumbs -->
+          <path d="M33 58C35 60 37 60 39 58M36 60V62.5" stroke="${strokeColor}" stroke-width="3.2" stroke-linecap="round"/>
+          <circle cx="43.5" cy="61.5" r="1.6" fill="${strokeColor}"/>
+          <circle cx="47.5" cy="59.5" r="1.4" fill="${strokeColor}"/>
+          <!-- Left Twin Shirt Collar -->
+          <path d="M35 68L41 74L48 67" stroke="${strokeColor}" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- Left Twin Arm & Bitten Choc Chip Cookie -->
+          <path d="M18 59C12 63 12 72 18 75" stroke="${strokeColor}" stroke-width="4.2" stroke-linecap="round"/>
+          <path d="M27 57C29 60 33 60 35 57C39 60 42 66 40 72C38 78 30 81 24 78C18 75 16 68 19 62C21 58 24 56 27 57Z" fill="#FFFFFF" stroke="${strokeColor}" stroke-width="4" stroke-linejoin="round"/>
+          <circle cx="24" cy="64" r="2" fill="${strokeColor}"/>
+          <circle cx="34" cy="65" r="2" fill="${strokeColor}"/>
+          <path d="M21 75C23 70 31 70 34 76" stroke="${strokeColor}" stroke-width="3.8" stroke-linecap="round"/>
+
+          <!-- Right Twin Head -->
+          <path d="M53 43C53 60 62 69 78 69C94 69 102 59 101 41" fill="#FFFFFF" stroke="${strokeColor}" stroke-width="4.2" stroke-linecap="round"/>
+          <!-- Right Twin Bowl-Cut Hair + Tuft -->
+          <path d="M62 14L60 8M66 13L69 8" stroke="${strokeColor}" stroke-width="3.6" stroke-linecap="round"/>
+          <path d="M51 39C52 21 63 12 80 12C95 12 104 22 104 40C99 42 94 39 89 39C84 39 80 43 75 42C70 41 66 38 61 39C57 40 54 41 51 39Z" fill="${strokeColor}" stroke="${strokeColor}" stroke-width="3.2" stroke-linejoin="round"/>
+          <!-- Right Twin Vertical Oval Eyes -->
+          <line x1="68" y1="47" x2="68" y2="52" stroke="${strokeColor}" stroke-width="4.2" stroke-linecap="round"/>
+          <line x1="85" y1="47" x2="85" y2="52" stroke="${strokeColor}" stroke-width="4.2" stroke-linecap="round"/>
+          <!-- Right Twin Smile -->
+          <path d="M72 58C75 61 80 61 83 58" stroke="${strokeColor}" stroke-width="3.6" stroke-linecap="round"/>
+          <!-- Right Twin Shirt Collar -->
+          <path d="M74 69L81 75L89 68" stroke="${strokeColor}" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- Right Twin Whole Choc Chip Cookie -->
+          <circle cx="62" cy="67" r="10.5" fill="#FFFFFF" stroke="${strokeColor}" stroke-width="4"/>
+          <circle cx="58.5" cy="64.5" r="1.9" fill="${strokeColor}"/>
+          <circle cx="65.5" cy="65" r="2.4" fill="${strokeColor}"/>
+          <circle cx="61.5" cy="71" r="2" fill="${strokeColor}"/>
+          <!-- Right Twin Hand -->
+          <path d="M97 58C105 58 109 64 105 69C102 72 97 70 95 67" fill="#FFFFFF" stroke="${strokeColor}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+    }
+
+    // =========================================================================
+    // 2. DATA-URI BAKERY ILLUSTRATIONS (Zero broken external links)
+    // =========================================================================
+    function createBakeryIllustration(bgHex, baseHex, toppingHex, style = 'cookie') {
+      if (style === 'drink') {
+        const svg = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+            <rect width="200" height="200" fill="${bgHex}"/>
+            <path d="M68 54 L132 54 L123 154 C122 160 117 164 111 164 L89 164 C83 164 78 160 77 154 Z" fill="#FFFFFF" stroke="#D7CCC8" stroke-width="3"/>
+            <path d="M72 82 L128 82 L121 152 C120 157 116 160 111 160 L89 160 C84 160 80 157 79 152 Z" fill="${baseHex}"/>
+            <path d="M72 82 Q100 96 128 82 L126 102 Q100 114 74 102 Z" fill="${toppingHex}" opacity="0.9"/>
+            <rect x="110" y="28" width="6" height="68" rx="3" transform="rotate(12 110 28)" fill="#E57A9F"/>
+          </svg>
+        `;
+        return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      }
+
+      if (style === 'drizzle') {
+        const svg = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+            <rect width="200" height="200" fill="${bgHex}"/>
+            <circle cx="100" cy="104" r="50" fill="rgba(62,39,35,0.08)"/>
+            <circle cx="100" cy="98" r="50" fill="${baseHex}"/>
+            <path d="M66 84 Q100 70 134 84" stroke="${toppingHex}" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+            <path d="M62 102 Q100 88 138 102" stroke="${toppingHex}" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+            <path d="M70 120 Q100 106 130 120" stroke="${toppingHex}" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+            <circle cx="100" cy="98" r="15" fill="#FFFDF9"/>
+          </svg>
+        `;
+        return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      }
+
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+          <rect width="200" height="200" fill="${bgHex}"/>
+          <circle cx="100" cy="104" r="50" fill="rgba(62,39,35,0.08)"/>
+          <circle cx="100" cy="98" r="50" fill="${baseHex}"/>
+          <circle cx="80" cy="76" r="7" fill="${toppingHex}"/>
+          <circle cx="118" cy="72" r="6.5" fill="${toppingHex}"/>
+          <circle cx="72" cy="108" r="6.5" fill="${toppingHex}"/>
+          <circle cx="103" cy="101" r="8" fill="${toppingHex}"/>
+          <circle cx="127" cy="112" r="6" fill="${toppingHex}"/>
+          <circle cx="94" cy="129" r="6.5" fill="${toppingHex}"/>
+        </svg>
+      `;
+      return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    }
+
+    // =========================================================================
+    // 3. STATE & STORAGE MANAGEMENT (twincakes_pos_v1)
+    // =========================================================================
+    const STORAGE_KEY = 'twincakes_pos_v1';
+
+    const DEFAULT_MENU = [
+      {
+        id: 'tc-item-1',
+        name: 'Classic Choc Chip Cookie',
+        price: 85.00,
+        category: 'Cookies',
+        image: createBakeryIllustration('#FDF2E9', '#D69A5C', '#3E2315', 'cookie'),
+      },
+      {
+        id: 'tc-item-2',
+        name: 'Double Fudge Brownie Cookie',
+        price: 95.00,
+        category: 'Cookies',
+        image: createBakeryIllustration('#F4ECE8', '#4E2E22', '#26130C', 'cookie'),
+      },
+      {
+        id: 'tc-item-3',
+        name: 'Matcha White Choc Cookie',
+        price: 100.00,
+        category: 'Cookies',
+        image: createBakeryIllustration('#EDF7EE', '#7BA066', '#FFFDF5', 'cookie'),
+      },
+      {
+        id: 'tc-item-4',
+        name: 'Red Velvet Cream Cheese Cookie',
+        price: 105.00,
+        category: 'Cookies',
+        image: createBakeryIllustration('#FCEEF1', '#A62C37', '#FFFDF9', 'drizzle'),
+      },
+      {
+        id: 'tc-item-5',
+        name: 'Biscoff Lotus Stuffed Cookie',
+        price: 115.00,
+        category: 'Cookies',
+        image: createBakeryIllustration('#FBF2E6', '#C67D43', '#F5DEC2', 'drizzle'),
+      },
+      {
+        id: 'tc-item-6',
+        name: 'Iced Spanish Latte',
+        price: 130.00,
+        category: 'Drinks',
+        image: createBakeryIllustration('#F5EFEA', '#B87D52', '#F4E6D8', 'drink'),
+      },
+    ];
+
+    function buildStarterReceipts() {
+      const now = Date.now();
+      return [
+        {
+          receiptNumber: 'TC-1001',
+          timestamp: new Date(now - 1000 * 60 * 35).toISOString(),
+          customerName: 'Table 2 — Bianca',
+          items: [
+            { productId: 'tc-item-1', name: 'Classic Choc Chip Cookie', category: 'Cookies', price: 85.00, qty: 2 },
+            { productId: 'tc-item-3', name: 'Matcha White Choc Cookie', category: 'Cookies', price: 100.00, qty: 1 },
+          ],
+          subtotal: 270.00,
+          discount: 0,
+          vatEnabled: false,
+          vatAmount: 0,
+          grandTotal: 270.00,
+        },
+        {
+          receiptNumber: 'TC-1002',
+          timestamp: new Date(now - 1000 * 60 * 140).toISOString(),
+          customerName: 'Grab — Marco',
+          items: [
+            { productId: 'tc-item-4', name: 'Red Velvet Cream Cheese Cookie', category: 'Cookies', price: 105.00, qty: 2 },
+            { productId: 'tc-item-5', name: 'Biscoff Lotus Stuffed Cookie', category: 'Cookies', price: 115.00, qty: 2 },
+            { productId: 'tc-item-6', name: 'Iced Spanish Latte', category: 'Drinks', price: 130.00, qty: 1 },
+          ],
+          subtotal: 570.00,
+          discount: 0,
+          vatEnabled: false,
+          vatAmount: 0,
+          grandTotal: 570.00,
+        },
+      ];
+    }
+
+    let appState = {
+      products: [],
+      receipts: [],
+      nextReceiptSeq: 1003,
+      cart: [], // [{ productId, name, category, price, qty }]
+      activeCategory: 'All',
+      isEditCatalogMode: false,
+      activeView: 'pos',
+      historyDateMode: 'all', // 'all' | 'today' | 'specific'
+      newProductUploadedImage: null,
+    };
+
+    function loadAppState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          appState.products = Array.isArray(parsed.products) && parsed.products.length > 0 ? parsed.products : [...DEFAULT_MENU];
+          appState.receipts = Array.isArray(parsed.receipts) ? parsed.receipts : buildStarterReceipts();
+          appState.nextReceiptSeq = Number(parsed.nextReceiptSeq) || 1003;
+        } else {
+          appState.products = [...DEFAULT_MENU];
+          appState.receipts = buildStarterReceipts();
+          appState.nextReceiptSeq = 1003;
+          persistAppState();
+        }
+      } catch (err) {
+        console.error('Error reading localStorage:', err);
+        appState.products = [...DEFAULT_MENU];
+        appState.receipts = buildStarterReceipts();
+        appState.nextReceiptSeq = 1003;
+      }
+    }
+
+    function persistAppState() {
+      try {
+        const payload = {
+          products: appState.products,
+          receipts: appState.receipts,
+          nextReceiptSeq: appState.nextReceiptSeq,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch (err) {
+        console.error('Error saving to localStorage:', err);
+        showToast('Storage warning: try uploading smaller product images.');
+      }
+    }
+
+    // =========================================================================
+    // 4. FORMATTING & UI HELPERS
+    // =========================================================================
+    function formatPeso(val) {
+      const n = Number(val) || 0;
+      return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    function formatDisplayDateTime(iso) {
+      const d = new Date(iso);
+      return d.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    }
+
+    function escapeHTML(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function showToast(message) {
+      const banner = document.getElementById('toast-banner');
+      const text = document.getElementById('toast-text');
+      if (!banner || !text) return;
+      text.textContent = message;
+      banner.classList.remove('opacity-0', 'translate-y-2');
+      banner.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(window._tcToastTimer);
+      window._tcToastTimer = setTimeout(() => {
+        banner.classList.add('opacity-0', 'translate-y-2');
+        banner.classList.remove('opacity-100', 'translate-y-0');
+      }, 2400);
+    }
+
+    function updateReceiptClock() {
+      const now = new Date();
+      const dtEl = document.getElementById('receipt-live-datetime');
+      const numEl = document.getElementById('receipt-live-number');
+      if (dtEl) {
+        dtEl.textContent = now.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        });
+      }
+      if (numEl) {
+        numEl.textContent = `#TC-${appState.nextReceiptSeq}`;
+      }
+    }
+
+    // Compress uploaded images via HTML5 Canvas so localStorage remains fast & safe
+    function compressImageFileToDataURL(file, callback) {
+      try {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const img = new Image();
+          img.onload = function () {
+            const MAX_DIM = 420;
+            let w = img.width;
+            let h = img.height;
+            if (w > h && w > MAX_DIM) {
+              h = Math.round((h * MAX_DIM) / w);
+              w = MAX_DIM;
+            } else if (h > MAX_DIM) {
+              w = Math.round((w * MAX_DIM) / h);
+              h = MAX_DIM;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            callback(dataUrl);
+          };
+          img.onerror = function () {
+            showToast('Could not read that image file.');
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('Image compression error:', err);
+        showToast('Failed to process image.');
+      }
+    }
+
+    // =========================================================================
+    // 5. TOP NAVIGATION SWITCHER
+    // =========================================================================
+    function switchView(viewName) {
+      appState.activeView = viewName;
+      const posEl = document.getElementById('view-pos');
+      const histEl = document.getElementById('view-history');
+      const btnPos = document.getElementById('nav-btn-pos');
+      const btnHist = document.getElementById('nav-btn-history');
+
+      if (viewName === 'pos') {
+        posEl.classList.remove('hidden');
+        histEl.classList.add('hidden');
+        btnPos.className = 'min-h-[44px] px-4 sm:px-5 rounded-xl text-sm font-extrabold flex items-center gap-2 transition-all bg-white text-[#3E2723] shadow-xs border border-[#F2A6C3]/70';
+        btnHist.className = 'min-h-[44px] px-4 sm:px-5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all text-[#5D4037] hover:text-[#3E2723]';
+      } else {
+        posEl.classList.add('hidden');
+        histEl.classList.remove('hidden');
+        btnHist.className = 'min-h-[44px] px-4 sm:px-5 rounded-xl text-sm font-extrabold flex items-center gap-2 transition-all bg-white text-[#3E2723] shadow-xs border border-[#F2A6C3]/70';
+        btnPos.className = 'min-h-[44px] px-4 sm:px-5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all text-[#5D4037] hover:text-[#3E2723]';
+        renderHistoryView();
+      }
+    }
+
+    // =========================================================================
+    // 6. MENU CATEGORIES, PRODUCT CARDS & INLINE CATALOG EDITING
+    // =========================================================================
+    function renderCategoryPills() {
+      const categories = ['All', 'Cookies', 'Brownies & Bars', 'Drinks'];
+      const container = document.getElementById('category-pills-container');
+      if (!container) return;
+
+      container.innerHTML = categories
+        .map((cat) => {
+          const isActive = appState.activeCategory === cat;
+          return `
+            <button
+              type="button"
+              onclick="selectCategory('${cat}')"
+              class="min-h-[42px] px-4 rounded-xl text-xs sm:text-sm font-extrabold shrink-0 transition ${
+                isActive
+                  ? 'bg-[#FADADD] text-[#3E2723] border border-[#F2A6C3] shadow-xs'
+                  : 'bg-white text-[#6D4C41] border border-[#E6D7CC] hover:bg-[#F7F1EB]'
+              }"
+            >
+              ${escapeHTML(cat)}
+            </button>
+          `;
+        })
+        .join('');
+    }
+
+    function selectCategory(cat) {
+      appState.activeCategory = cat;
+      renderCategoryPills();
+      renderMenuGrid();
+    }
+
+    function toggleEditCatalogMode() {
+      appState.isEditCatalogMode = !appState.isEditCatalogMode;
+      const btn = document.getElementById('btn-toggle-edit');
+      const btnText = document.getElementById('btn-toggle-edit-text');
+      const banner = document.getElementById('edit-catalog-banner');
+      const helper = document.getElementById('menu-helper-text');
+
+      if (appState.isEditCatalogMode) {
+        btn.className = 'min-h-[44px] px-4 rounded-xl bg-[#D95384] text-white text-sm font-extrabold flex items-center gap-2 shadow-xs transition';
+        btnText.textContent = 'Editing Catalog';
+        banner.classList.remove('hidden');
+        helper.textContent = 'Modify product names, prices, categories, or photos below.';
+      } else {
+        btn.className = 'min-h-[44px] px-4 rounded-xl border border-[#E6D7CC] bg-white hover:bg-[#F7F1EB] active:scale-95 text-[#3E2723] text-sm font-bold flex items-center gap-2 transition';
+        btnText.textContent = 'Edit Catalog';
+        banner.classList.add('hidden');
+        helper.textContent = 'Tap any item to add it to the customer receipt tally.';
+      }
+
+      renderMenuGrid();
+    }
+
+    function renderMenuGrid() {
+      const grid = document.getElementById('menu-grid');
+      if (!grid) return;
+
+      const searchQuery = (document.getElementById('pos-menu-search')?.value || '').trim().toLowerCase();
+
+      const filtered = appState.products.filter((prod) => {
+        const matchesCat = appState.activeCategory === 'All' || prod.category === appState.activeCategory;
+        const matchesSearch =
+          !searchQuery ||
+          prod.name.toLowerCase().includes(searchQuery) ||
+          (prod.category || '').toLowerCase().includes(searchQuery);
+        return matchesCat && matchesSearch;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full bg-white rounded-2xl border border-[#E6D7CC] p-10 text-center">
+            <p class="font-extrabold text-[#3E2723]">No products match your filter</p>
+            <p class="text-xs text-[#6D4C41] mt-1">Try switching categories or tap "+ Add New Product" above.</p>
+          </div>
+        `;
+        return;
+      }
+
+      if (!appState.isEditCatalogMode) {
+        // NORMAL POS TAP-TO-ADD CARDS
+        grid.innerHTML = filtered
+          .map((prod) => {
+            const cartItem = appState.cart.find((c) => c.productId === prod.id);
+            const qtyBadge = cartItem
+              ? `<span class="absolute top-2.5 right-2.5 min-w-[30px] h-7 px-2 rounded-full bg-[#3E2723] text-white font-mono text-xs font-bold flex items-center justify-center shadow-md ring-2 ring-white">${cartItem.qty}</span>`
+              : '';
+
+            return `
+              <button
+                type="button"
+                onclick="addItemToOrder('${prod.id}')"
+                class="group relative bg-white rounded-2xl border ${
+                  cartItem ? 'border-[#E57A9F] ring-2 ring-[#FADADD]' : 'border-[#E6D7CC] hover:border-[#F2A6C3]'
+                } overflow-hidden text-left shadow-xs hover:shadow-md active:scale-[0.97] transition-all flex flex-col"
+              >
+                <div class="relative aspect-[4/3] w-full bg-[#FFFBF7] overflow-hidden">
+                  <img
+                    src="${prod.image}"
+                    alt="${escapeHTML(prod.name)}"
+                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onerror="this.src='${createBakeryIllustration('#FDF2E9', '#D69A5C', '#3E2315', 'cookie')}'"
+                  />
+                  ${qtyBadge}
+                </div>
+
+                <div class="p-3.5 flex-1 flex flex-col justify-between gap-2">
+                  <div>
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#A1887F]">${escapeHTML(prod.category || 'Cookies')}</span>
+                    <h3 class="font-extrabold text-sm sm:text-[15px] text-[#3E2723] leading-snug line-clamp-2 mt-0.5">${escapeHTML(prod.name)}</h3>
+                  </div>
+
+                  <div class="pt-1 flex items-center justify-between">
+                    <span class="font-mono font-bold text-base text-[#3E2723] tabular-nums">${formatPeso(prod.price)}</span>
+                    <span class="w-8 h-8 rounded-xl bg-[#FFF0F5] group-hover:bg-[#3E2723] text-[#3E2723] group-hover:text-white border border-[#F2A6C3] group-hover:border-[#3E2723] flex items-center justify-center text-base font-extrabold transition-colors">+</span>
+                  </div>
+                </div>
+              </button>
+            `;
+          })
+          .join('');
+      } else {
+        // INLINE EDIT CATALOG CARDS (Edit Name, Price, Category, Photo Upload/URL, Delete)
+        grid.innerHTML = filtered
+          .map((prod) => {
+            return `
+              <div class="bg-white rounded-2xl border-2 border-[#F2A6C3] p-3.5 shadow-sm flex flex-col gap-2.5">
+                <div class="relative aspect-[16/10] w-full rounded-xl bg-[#FFFBF7] border border-[#E6D7CC] overflow-hidden">
+                  <img
+                    src="${prod.image}"
+                    alt="${escapeHTML(prod.name)}"
+                    class="w-full h-full object-cover"
+                    onerror="this.src='${createBakeryIllustration('#FDF2E9', '#D69A5C', '#3E2315', 'cookie')}'"
+                  />
+                  <label class="absolute bottom-2 right-2 min-h-[34px] px-2.5 rounded-lg bg-[#3E2723]/90 hover:bg-[#3E2723] text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-xs">
+                    <span>📷 Change Photo</span>
+                    <input type="file" accept="image/*" onchange="inlineUpdateProductPhoto('${prod.id}', event)" class="hidden" />
+                  </label>
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-bold uppercase text-[#8D6E63] mb-0.5">Item Name</label>
+                  <input
+                    type="text"
+                    value="${escapeHTML(prod.name)}"
+                    onchange="inlineUpdateProductField('${prod.id}', 'name', this.value)"
+                    class="w-full min-h-[38px] px-2.5 rounded-lg border border-[#E6D7CC] bg-[#FFFBF7] text-xs font-extrabold text-[#3E2723] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+                  />
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[10px] font-bold uppercase text-[#8D6E63] mb-0.5">Price (₱)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value="${Number(prod.price).toFixed(2)}"
+                      onchange="inlineUpdateProductField('${prod.id}', 'price', this.value)"
+                      class="w-full min-h-[38px] px-2.5 rounded-lg border border-[#E6D7CC] bg-[#FFFBF7] text-xs font-mono font-bold text-[#3E2723] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] font-bold uppercase text-[#8D6E63] mb-0.5">Category</label>
+                    <select
+                      onchange="inlineUpdateProductField('${prod.id}', 'category', this.value)"
+                      class="w-full min-h-[38px] px-2 rounded-lg border border-[#E6D7CC] bg-[#FFFBF7] text-xs font-bold text-[#3E2723] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+                    >
+                      <option value="Cookies" ${prod.category === 'Cookies' ? 'selected' : ''}>Cookies</option>
+                      <option value="Brownies & Bars" ${prod.category === 'Brownies & Bars' ? 'selected' : ''}>Brownies &amp; Bars</option>
+                      <option value="Drinks" ${prod.category === 'Drinks' ? 'selected' : ''}>Drinks</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-bold uppercase text-[#8D6E63] mb-0.5">Image URL (Optional)</label>
+                  <input
+                    type="text"
+                    value="${prod.image.startsWith('data:') ? '' : escapeHTML(prod.image)}"
+                    placeholder="Paste image URL..."
+                    onchange="inlineUpdateProductUrl('${prod.id}', this.value)"
+                    class="w-full min-h-[34px] px-2.5 rounded-lg border border-[#E6D7CC] bg-[#FFFBF7] text-[11px] text-[#3E2723] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#E57A9F]"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onclick="confirmDeleteProduct('${prod.id}')"
+                  class="mt-1 min-h-[36px] w-full rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition"
+                >
+                  Delete Product
+                </button>
+              </div>
+            `;
+          })
+          .join('');
+      }
+    }
+
+    function inlineUpdateProductField(prodId, field, rawVal) {
+      const idx = appState.products.findIndex((p) => p.id === prodId);
+      if (idx === -1) return;
+
+      if (field === 'name') {
+        const trimmed = rawVal.trim();
+        if (!trimmed) return;
+        appState.products[idx].name = trimmed;
+        const cartMatch = appState.cart.find((c) => c.productId === prodId);
+        if (cartMatch) cartMatch.name = trimmed;
+      } else if (field === 'price') {
+        const parsed = parseFloat(rawVal);
+        if (isNaN(parsed) || parsed < 0) return;
+        appState.products[idx].price = parsed;
+        const cartMatch = appState.cart.find((c) => c.productId === prodId);
+        if (cartMatch) cartMatch.price = parsed;
+      } else if (field === 'category') {
+        appState.products[idx].category = rawVal;
+        const cartMatch = appState.cart.find((c) => c.productId === prodId);
+        if (cartMatch) cartMatch.category = rawVal;
+      }
+
+      persistAppState();
+      renderReceiptTally();
+      showToast('Product updated!');
+    }
+
+    function inlineUpdateProductPhoto(prodId, event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      compressImageFileToDataURL(file, (compressedUrl) => {
+        const idx = appState.products.findIndex((p) => p.id === prodId);
+        if (idx !== -1) {
+          appState.products[idx].image = compressedUrl;
+          persistAppState();
+          renderMenuGrid();
+          showToast('Product photo updated!');
+        }
+      });
+    }
+
+    function inlineUpdateProductUrl(prodId, urlVal) {
+      const trimmed = urlVal.trim();
+      if (!trimmed) return;
+      const idx = appState.products.findIndex((p) => p.id === prodId);
+      if (idx !== -1) {
+        appState.products[idx].image = trimmed;
+        persistAppState();
+        renderMenuGrid();
+        showToast('Product image URL saved!');
+      }
+    }
+
+    function confirmDeleteProduct(prodId) {
+      const prod = appState.products.find((p) => p.id === prodId);
+      if (!prod) return;
+
+      openConfirmDialog(
+        'Delete Menu Item?',
+        `Remove "${prod.name}" from your TwinCakes menu? Existing past receipts will stay intact.`,
+        () => {
+          appState.products = appState.products.filter((p) => p.id !== prodId);
+          appState.cart = appState.cart.filter((c) => c.productId !== prodId);
+          persistAppState();
+          renderMenuGrid();
+          renderReceiptTally();
+          showToast(`Deleted "${prod.name}"`);
+        }
+      );
+    }
+
+    // Add New Product Modal Handlers
+    function openAddProductModal() {
+      appState.newProductUploadedImage = null;
+      document.getElementById('new-prod-name').value = '';
+      document.getElementById('new-prod-price').value = '';
+      document.getElementById('new-prod-category').value = 'Cookies';
+      document.getElementById('new-prod-url').value = '';
+      document.getElementById('new-prod-preview').src = createBakeryIllustration('#FDF2E9', '#D69A5C', '#3E2315', 'cookie');
+
+      const modal = document.getElementById('add-product-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeAddProductModal() {
+      const modal = document.getElementById('add-product-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function handleNewProductFile(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      compressImageFileToDataURL(file, (compressedUrl) => {
+        appState.newProductUploadedImage = compressedUrl;
+        document.getElementById('new-prod-preview').src = compressedUrl;
+        document.getElementById('new-prod-url').value = '';
+      });
+    }
+
+    function previewNewProductUrl(urlVal) {
+      if (urlVal && urlVal.trim().length > 5) {
+        appState.newProductUploadedImage = null;
+        document.getElementById('new-prod-preview').src = urlVal.trim();
+      }
+    }
+
+    function submitNewProduct(event) {
+      event.preventDefault();
+      const name = document.getElementById('new-prod-name').value.trim();
+      const price = parseFloat(document.getElementById('new-prod-price').value);
+      const category = document.getElementById('new-prod-category').value || 'Cookies';
+      const urlVal = document.getElementById('new-prod-url').value.trim();
+
+      if (!name || isNaN(price) || price < 0) return;
+
+      const defaultArt =
+        category === 'Drinks'
+          ? createBakeryIllustration('#F5EFEA', '#B87D52', '#F4E6D8', 'drink')
+          : createBakeryIllustration('#FDF2E9', '#D69A5C', '#3E2315', 'cookie');
+
+      const finalImage = appState.newProductUploadedImage || urlVal || defaultArt;
+
+      appState.products.push({
+        id: 'tc-item-' + Date.now(),
+        name,
+        price,
+        category,
+        image: finalImage,
+      });
+
+      persistAppState();
+      renderMenuGrid();
+      closeAddProductModal();
+      showToast(`Added "${name}" to TwinCakes menu!`);
+    }
+
+    // =========================================================================
+    // 7. ACTIVE RECEIPT TALLY & CHECKOUT
+    // =========================================================================
+    function addItemToOrder(productId) {
+      const prod = appState.products.find((p) => p.id === productId);
+      if (!prod) return;
+
+      const existing = appState.cart.find((item) => item.productId === productId);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        appState.cart.push({
+          productId: prod.id,
+          name: prod.name,
+          category: prod.category || 'Cookies',
+          price: prod.price,
+          qty: 1,
+        });
+      }
+
+      renderMenuGrid();
+      renderReceiptTally();
+    }
+
+    function adjustCartItemQty(productId, delta) {
+      const idx = appState.cart.findIndex((item) => item.productId === productId);
+      if (idx === -1) return;
+
+      appState.cart[idx].qty += delta;
+      if (appState.cart[idx].qty <= 0) {
+        appState.cart.splice(idx, 1);
+      }
+
+      renderMenuGrid();
+      renderReceiptTally();
+    }
+
+    function removeCartItem(productId) {
+      appState.cart = appState.cart.filter((item) => item.productId !== productId);
+      renderMenuGrid();
+      renderReceiptTally();
+    }
+
+    function clearActiveOrder() {
+      appState.cart = [];
+      document.getElementById('order-customer-input').value = '';
+      document.getElementById('order-discount-input').value = '0';
+      document.getElementById('order-vat-checkbox').checked = false;
+      renderMenuGrid();
+      renderReceiptTally();
+    }
+
+    function computeOrderTotals() {
+      const totalPcs = appState.cart.reduce((sum, item) => sum + item.qty, 0);
+      const subtotal = appState.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+      const rawDiscount = parseFloat(document.getElementById('order-discount-input')?.value || '0') || 0;
+      const discount = Math.max(0, Math.min(subtotal, rawDiscount));
+      const discountedBase = Math.max(0, subtotal - discount);
+      const vatEnabled = Boolean(document.getElementById('order-vat-checkbox')?.checked);
+      const vatAmount = vatEnabled ? discountedBase * 0.12 : 0;
+      const grandTotal = discountedBase + vatAmount;
+
+      return { totalPcs, subtotal, discount, vatEnabled, vatAmount, grandTotal };
+    }
+
+    function renderReceiptTally() {
+      const listEl = document.getElementById('receipt-tally-list');
+      const clearBtn = document.getElementById('btn-clear-order');
+      const completeBtn = document.getElementById('btn-complete-order');
+
+      if (appState.cart.length === 0) {
+        clearBtn.classList.add('hidden');
+        completeBtn.disabled = true;
+
+        listEl.innerHTML = `
+          <div class="h-full min-h-[190px] flex flex-col items-center justify-center text-center py-8 px-4">
+            <div class="w-16 h-12 rounded-2xl bg-[#FFF0F5] border border-[#F2A6C3] flex items-center justify-center p-1 mb-2.5">
+              ${getTwinCakesLogoSVG('#5D4037')}
+            </div>
+            <p class="font-mono text-xs font-bold uppercase tracking-wider text-[#5D4037]">Empty Order Tape</p>
+            <p class="text-xs text-[#8D6E63] mt-1 max-w-[220px]">Tap cookies or drinks on the left to start counting the customer's items.</p>
+          </div>
+        `;
+      } else {
+        clearBtn.classList.remove('hidden');
+        completeBtn.disabled = false;
+
+        listEl.innerHTML = appState.cart
+          .map(
+            (item) => `
+              <div class="py-2.5 flex items-center justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <p class="font-extrabold text-xs sm:text-sm text-[#3E2723] truncate">${escapeHTML(item.name)}</p>
+                  <p class="font-mono text-[11px] text-stone-500 tabular-nums">${formatPeso(item.price)} each</p>
+                </div>
+
+                <!-- Touch-friendly [ - ] Qty [ + ] Stepper & Remove -->
+                <div class="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onclick="adjustCartItemQty('${item.productId}', -1)"
+                    aria-label="Decrease quantity"
+                    class="w-9 h-9 rounded-xl border border-[#E6D7CC] bg-[#FFFBF7] hover:bg-[#FADADD] active:scale-90 font-mono font-bold text-base text-[#3E2723] flex items-center justify-center transition"
+                  >
+                    −
+                  </button>
+                  <span class="w-7 text-center font-mono font-bold text-sm text-[#3E2723] tabular-nums">${item.qty}</span>
+                  <button
+                    type="button"
+                    onclick="adjustCartItemQty('${item.productId}', 1)"
+                    aria-label="Increase quantity"
+                    class="w-9 h-9 rounded-xl border border-[#E6D7CC] bg-[#FFFBF7] hover:bg-[#FADADD] active:scale-90 font-mono font-bold text-base text-[#3E2723] flex items-center justify-center transition"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onclick="removeCartItem('${item.productId}')"
+                    aria-label="Remove item"
+                    title="Remove item"
+                    class="w-8 h-9 rounded-xl text-stone-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center text-xs font-bold transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div class="w-[68px] text-right font-mono font-bold text-xs sm:text-sm text-[#3E2723] tabular-nums shrink-0">
+                  ${formatPeso(item.price * item.qty)}
+                </div>
+              </div>
+            `
+          )
+          .join('');
+      }
+
+      const { totalPcs, subtotal, vatAmount, grandTotal } = computeOrderTotals();
+      document.getElementById('tally-total-pcs').textContent = `${totalPcs} ${totalPcs === 1 ? 'pc' : 'pcs'}`;
+      document.getElementById('tally-subtotal').textContent = formatPeso(subtotal);
+      document.getElementById('tally-vat-amount').textContent = formatPeso(vatAmount);
+      document.getElementById('tally-grand-total').textContent = formatPeso(grandTotal);
+    }
+
+    function completeAndPrintOrder() {
+      if (appState.cart.length === 0) return;
+
+      const customerName = document.getElementById('order-customer-input').value.trim() || 'Walk-in Guest';
+      const { subtotal, discount, vatEnabled, vatAmount, grandTotal } = computeOrderTotals();
+
+      const completedReceipt = {
+        receiptNumber: `TC-${appState.nextReceiptSeq}`,
+        timestamp: new Date().toISOString(),
+        customerName,
+        items: appState.cart.map((item) => ({ ...item })),
+        subtotal,
+        discount,
+        vatEnabled,
+        vatAmount,
+        grandTotal,
+      };
+
+      appState.receipts.unshift(completedReceipt);
+      appState.nextReceiptSeq += 1;
+      persistAppState();
+      updateNavHistoryBadge();
+
+      openReceiptPreviewModal(completedReceipt);
+      clearActiveOrder();
+      updateReceiptClock();
+    }
+
+    // =========================================================================
+    // 8. RECEIPT PREVIEW / PRINT MODAL
+    // =========================================================================
+    function openReceiptPreviewModal(receipt) {
+      document.getElementById('modal-receipt-num').textContent = `#${receipt.receiptNumber}`;
+      document.getElementById('modal-receipt-timestamp').textContent = formatDisplayDateTime(receipt.timestamp);
+      document.getElementById('modal-receipt-cust').textContent = receipt.customerName || 'Walk-in Guest';
+
+      let totalPcs = 0;
+      const linesHtml = receipt.items
+        .map((item) => {
+          totalPcs += item.qty;
+          return `
+            <div class="flex justify-between items-start gap-2">
+              <div>
+                <span class="font-bold">${item.qty}x</span> ${escapeHTML(item.name)}
+                <div class="text-[11px] text-stone-400">@ ${formatPeso(item.price)}</div>
+              </div>
+              <span class="font-bold tabular-nums">${formatPeso(item.price * item.qty)}</span>
+            </div>
+          `;
+        })
+        .join('');
+
+      document.getElementById('modal-receipt-lines').innerHTML = linesHtml;
+      document.getElementById('modal-receipt-pcs').textContent = `${totalPcs} pcs`;
+      document.getElementById('modal-receipt-sub').textContent = formatPeso(receipt.subtotal);
+
+      const discRow = document.getElementById('modal-receipt-disc-row');
+      if (receipt.discount > 0) {
+        discRow.classList.remove('hidden');
+        document.getElementById('modal-receipt-disc').textContent = `-${formatPeso(receipt.discount)}`;
+      } else {
+        discRow.classList.add('hidden');
+      }
+
+      const vatRow = document.getElementById('modal-receipt-vat-row');
+      if (receipt.vatEnabled && receipt.vatAmount > 0) {
+        vatRow.classList.remove('hidden');
+        document.getElementById('modal-receipt-vat').textContent = formatPeso(receipt.vatAmount);
+      } else {
+        vatRow.classList.add('hidden');
+      }
+
+      document.getElementById('modal-receipt-total').textContent = formatPeso(receipt.grandTotal);
+
+      const modal = document.getElementById('receipt-preview-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeReceiptPreviewModal() {
+      const modal = document.getElementById('receipt-preview-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // =========================================================================
+    // 9. RECEIPT HISTORY, ITEM/FLAVOR SEARCH & EXCEL (.XLSX) EXPORT
+    // =========================================================================
+    function updateNavHistoryBadge() {
+      const badge = document.getElementById('nav-history-count');
+      if (badge) badge.textContent = appState.receipts.length;
+    }
+
+    function setHistoryDateMode(mode) {
+      appState.historyDateMode = mode;
+      const btnAll = document.getElementById('date-filter-all');
+      const btnToday = document.getElementById('date-filter-today');
+      const dateInput = document.getElementById('history-specific-date');
+
+      if (mode !== 'specific' && dateInput) {
+        dateInput.value = '';
+      }
+
+      btnAll.className =
+        mode === 'all'
+          ? 'min-h-[38px] px-3.5 rounded-lg text-xs font-extrabold bg-white text-[#3E2723] shadow-xs transition'
+          : 'min-h-[38px] px-3.5 rounded-lg text-xs font-bold text-[#6D4C41] hover:text-[#3E2723] transition';
+
+      btnToday.className =
+        mode === 'today'
+          ? 'min-h-[38px] px-3.5 rounded-lg text-xs font-extrabold bg-white text-[#3E2723] shadow-xs transition'
+          : 'min-h-[38px] px-3.5 rounded-lg text-xs font-bold text-[#6D4C41] hover:text-[#3E2723] transition';
+
+      renderHistoryView();
+    }
+
+    function clearHistorySearchInput() {
+      const input = document.getElementById('history-search-box');
+      if (input) input.value = '';
+      renderHistoryView();
+    }
+
+    function toggleQuickFlavorFilter(flavorName) {
+      const input = document.getElementById('history-search-box');
+      if (!input) return;
+      if (input.value.trim().toLowerCase() === flavorName.toLowerCase()) {
+        input.value = '';
+      } else {
+        input.value = flavorName;
+      }
+      renderHistoryView();
+    }
+
+    function getFilteredHistoryReceipts() {
+      const rawSearch = (document.getElementById('history-search-box')?.value || '').trim();
+      const query = rawSearch.toLowerCase();
+      const specificDateVal = document.getElementById('history-specific-date')?.value || '';
+      const now = new Date();
+
+      return appState.receipts.filter((receipt) => {
+        const rDate = new Date(receipt.timestamp);
+
+        if (appState.historyDateMode === 'today') {
+          const sameDay =
+            rDate.getFullYear() === now.getFullYear() &&
+            rDate.getMonth() === now.getMonth() &&
+            rDate.getDate() === now.getDate();
+          if (!sameDay) return false;
+        } else if (appState.historyDateMode === 'specific' && specificDateVal) {
+          const yyyy = rDate.getFullYear();
+          const mm = String(rDate.getMonth() + 1).padStart(2, '0');
+          const dd = String(rDate.getDate()).padStart(2, '0');
+          if (`${yyyy}-${mm}-${dd}` !== specificDateVal) return false;
+        }
+
+        if (!query) return true;
+
+        const dateStr = formatDisplayDateTime(receipt.timestamp).toLowerCase();
+        const matchNum = receipt.receiptNumber.toLowerCase().includes(query);
+        const matchCust = (receipt.customerName || '').toLowerCase().includes(query);
+        const matchDate = dateStr.includes(query);
+        const matchItem = receipt.items.some((item) => item.name.toLowerCase().includes(query));
+
+        return matchNum || matchCust || matchDate || matchItem;
+      });
+    }
+
+    function renderFlavorChipsBar() {
+      const bar = document.getElementById('flavor-chips-bar');
+      if (!bar) return;
+
+      // Gather unique product names from sold receipts + current menu
+      const uniqueNamesSet = new Set();
+      appState.receipts.forEach((r) => r.items.forEach((i) => uniqueNamesSet.add(i.name)));
+      appState.products.forEach((p) => uniqueNamesSet.add(p.name));
+
+      const currentQuery = (document.getElementById('history-search-box')?.value || '').trim().toLowerCase();
+
+      const chips = Array.from(uniqueNamesSet)
+        .map((name) => {
+          const isSelected = currentQuery === name.toLowerCase();
+          return `
+            <button
+              type="button"
+              onclick="toggleQuickFlavorFilter('${escapeHTML(name).replace(/'/g, "\\'")}')"
+              class="shrink-0 min-h-[36px] px-3 rounded-full text-xs font-bold border transition flex items-center gap-1.5 ${
+                isSelected
+                  ? 'bg-[#3E2723] text-white border-[#3E2723] shadow-xs'
+                  : 'bg-[#FFFBF7] text-[#5D4037] border-[#E6D7CC] hover:border-[#F2A6C3] hover:bg-[#FFF0F5]'
+              }"
+            >
+              <span>🍪</span>
+              <span>${escapeHTML(name)}</span>
+            </button>
+          `;
+        })
+        .join('');
+
+      bar.innerHTML = `<span class="text-xs font-extrabold text-[#8D6E63] shrink-0">Filter by Cookie / Item:</span>${chips}`;
+    }
+
+    function renderHistoryView() {
+      const searchBox = document.getElementById('history-search-box');
+      const clearBtn = document.getElementById('btn-clear-history-search');
+      const query = (searchBox?.value || '').trim().toLowerCase();
+
+      if (clearBtn) {
+        clearBtn.classList.toggle('hidden', query.length === 0);
+      }
+
+      renderFlavorChipsBar();
+
+      const matchingReceipts = getFilteredHistoryReceipts();
+
+      // Update KPI Cards
+      let sumRevenue = 0;
+      let sumPastries = 0;
+      matchingReceipts.forEach((r) => {
+        sumRevenue += Number(r.grandTotal) || 0;
+        r.items.forEach((i) => {
+          sumPastries += Number(i.qty) || 0;
+        });
+      });
+
+      document.getElementById('kpi-total-revenue').textContent = formatPeso(sumRevenue);
+      document.getElementById('kpi-total-orders').textContent = matchingReceipts.length;
+      document.getElementById('kpi-total-pastries').textContent = `${sumPastries} pcs`;
+
+      const listContainer = document.getElementById('history-orders-list');
+      if (matchingReceipts.length === 0) {
+        listContainer.innerHTML = `
+          <div class="bg-white rounded-2xl border border-[#E6D7CC] p-12 text-center">
+            <p class="text-base font-extrabold text-[#3E2723]">No receipts match your search</p>
+            <p class="text-sm text-[#6D4C41] mt-1">Try searching a different cookie flavor, customer name, or clearing the date filter.</p>
+          </div>
+        `;
+        return;
+      }
+
+      listContainer.innerHTML = matchingReceipts
+        .map((receipt) => {
+          let receiptPcs = 0;
+          const itemPills = receipt.items
+            .map((item) => {
+              receiptPcs += item.qty;
+              const isMatched = query && item.name.toLowerCase().includes(query);
+              return `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold ${
+                  isMatched
+                    ? 'bg-[#FADADD] text-[#3E2723] border border-[#E57A9F] ring-1 ring-[#E57A9F]'
+                    : 'bg-[#FFFBF7] text-[#5D4037] border border-[#E6D7CC]'
+                }">
+                  <span class="font-mono font-extrabold text-[#D95384]">${item.qty}×</span>
+                  <span>${escapeHTML(item.name)}</span>
+                </span>
+              `;
+            })
+            .join('');
+
+          return `
+            <div class="bg-white rounded-2xl border border-[#E6D7CC] p-4 sm:p-5 shadow-xs hover:border-[#F2A6C3] transition flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div class="space-y-2 flex-1 min-w-0">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <span class="font-mono font-bold text-xs sm:text-sm px-2.5 py-1 rounded-lg bg-[#3E2723] text-white">
+                    #${escapeHTML(receipt.receiptNumber)}
+                  </span>
+                  <span class="font-extrabold text-base text-[#3E2723]">
+                    ${escapeHTML(receipt.customerName || 'Walk-in Guest')}
+                  </span>
+                  <span class="text-xs font-semibold text-[#8D6E63]">
+                    • ${formatDisplayDateTime(receipt.timestamp)}
+                  </span>
+                  <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-[#F7F1EB] text-[#5D4037]">
+                    ${receiptPcs} ${receiptPcs === 1 ? 'item' : 'items'}
+                  </span>
+                </div>
+
+                <div class="flex flex-wrap gap-1.5 pt-0.5">
+                  ${itemPills}
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between lg:justify-end gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-[#F7F1EB] shrink-0">
+                <div class="text-left lg:text-right mr-2">
+                  <p class="text-[10px] font-extrabold uppercase tracking-wider text-[#8D6E63]">Grand Total</p>
+                  <p class="font-mono text-xl font-bold text-[#3E2723] tabular-nums">${formatPeso(receipt.grandTotal)}</p>
+                </div>
+
+                <button
+                  type="button"
+                  onclick="reprintHistoryReceipt('${receipt.receiptNumber}')"
+                  class="min-h-[44px] px-4 rounded-xl border border-[#E6D7CC] bg-[#FFFBF7] hover:bg-[#FADADD]/50 active:scale-95 text-[#3E2723] font-extrabold text-xs flex items-center gap-1.5 transition"
+                >
+                  <span>View / Reprint</span>
+                </button>
+
+                <button
+                  type="button"
+                  onclick="confirmDeleteReceipt('${receipt.receiptNumber}')"
+                  title="Delete Receipt"
+                  class="min-h-[44px] w-[44px] rounded-xl border border-[#E6D7CC] hover:border-rose-300 hover:bg-rose-50 text-[#8D6E63] hover:text-rose-600 flex items-center justify-center transition"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    function reprintHistoryReceipt(receiptNumber) {
+      const found = appState.receipts.find((r) => r.receiptNumber === receiptNumber);
+      if (found) openReceiptPreviewModal(found);
+    }
+
+    function confirmDeleteReceipt(receiptNumber) {
+      openConfirmDialog(
+        `Delete #${receiptNumber}?`,
+        'This receipt will be permanently removed from your TwinCakes history and Excel report.',
+        () => {
+          appState.receipts = appState.receipts.filter((r) => r.receiptNumber !== receiptNumber);
+          persistAppState();
+          updateNavHistoryBadge();
+          renderHistoryView();
+          showToast(`Removed #${receiptNumber}`);
+        }
+      );
+    }
+
+    // =========================================================================
+    // 10. EXCEL (.XLSX) MULTI-SHEET EXPORT (WITH CLEAN CSV FALLBACK)
+    // =========================================================================
+    function exportToExcelWorkbook() {
+      const receiptsToExport = getFilteredHistoryReceipts();
+
+      if (receiptsToExport.length === 0) {
+        showToast('No receipts to export for current filter.');
+        return;
+      }
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      // Build Sheet 1: Order Summary
+      const orderSummaryData = receiptsToExport.map((r) => {
+        const dt = new Date(r.timestamp);
+        const totalQty = r.items.reduce((sum, i) => sum + i.qty, 0);
+        const itemsText = r.items.map((i) => `${i.qty}x ${i.name}`).join(', ');
+        const discTaxNet = Number(((r.vatAmount || 0) - (r.discount || 0)).toFixed(2));
+
+        return {
+          'Receipt #': r.receiptNumber,
+          'Date': dt.toLocaleDateString('en-US'),
+          'Time': dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          'Customer': r.customerName || 'Walk-in Guest',
+          'Items Summary': itemsText,
+          'Total Qty': Number(totalQty),
+          'Subtotal': Number(r.subtotal.toFixed(2)),
+          'Discount/Tax': discTaxNet,
+          'Grand Total': Number(r.grandTotal.toFixed(2)),
+        };
+      });
+
+      // Build Sheet 2: Itemized Breakdown
+      const itemizedBreakdownData = [];
+      receiptsToExport.forEach((r) => {
+        const dt = new Date(r.timestamp);
+        r.items.forEach((item) => {
+          itemizedBreakdownData.push({
+            'Receipt #': r.receiptNumber,
+            'Date': dt.toLocaleDateString('en-US'),
+            'Customer': r.customerName || 'Walk-in Guest',
+            'Product Name': item.name,
+            'Category': item.category || 'Cookies',
+            'Qty Sold': Number(item.qty),
+            'Unit Price': Number(item.price.toFixed(2)),
+            'Line Total': Number((item.price * item.qty).toFixed(2)),
+          });
+        });
+      });
+
+      // Use SheetJS if loaded, otherwise clean CSV fallback
+      if (typeof XLSX !== 'undefined') {
+        try {
+          const wb = XLSX.utils.book_new();
+
+          const ws1 = XLSX.utils.json_to_sheet(orderSummaryData);
+          ws1['!cols'] = [
+            { wch: 13 },
+            { wch: 13 },
+            { wch: 11 },
+            { wch: 22 },
+            { wch: 46 },
+            { wch: 11 },
+            { wch: 12 },
+            { wch: 14 },
+            { wch: 14 },
+          ];
+
+          const ws2 = XLSX.utils.json_to_sheet(itemizedBreakdownData);
+          ws2['!cols'] = [
+            { wch: 13 },
+            { wch: 13 },
+            { wch: 22 },
+            { wch: 28 },
+            { wch: 16 },
+            { wch: 11 },
+            { wch: 13 },
+            { wch: 13 },
+          ];
+
+          XLSX.utils.book_append_sheet(wb, ws1, 'Order Summary');
+          XLSX.utils.book_append_sheet(wb, ws2, 'Itemized Breakdown');
+
+          XLSX.writeFile(wb, `TwinCakes_Sales_Report_${todayStr}.xlsx`);
+          showToast(`Downloaded TwinCakes_Sales_Report_${todayStr}.xlsx`);
+          return;
+        } catch (err) {
+          console.error('XLSX export failed, falling back to CSV:', err);
+        }
+      }
+
+      // Clean CSV Fallback if offline
+      const headers = Object.keys(orderSummaryData[0]);
+      const csvLines = [
+        headers.join(','),
+        ...orderSummaryData.map((row) =>
+          headers.map((h) => `"${String(row[h]).replace(/"/g, '""')}"`).join(',')
+        ),
+      ];
+      const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `TwinCakes_Sales_Report_${todayStr}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded TwinCakes_Sales_Report_${todayStr}.csv`);
+    }
+
+    // =========================================================================
+    // 11. CUSTOM CONFIRMATION MODAL & DEMO RESET
+    // =========================================================================
+    let _onConfirmAction = null;
+
+    function openConfirmDialog(title, message, onProceed) {
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-message').textContent = message;
+      _onConfirmAction = onProceed;
+      const modal = document.getElementById('custom-confirm-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeConfirmDialog() {
+      const modal = document.getElementById('custom-confirm-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      _onConfirmAction = null;
+    }
+
+    function openResetDemoConfirm() {
+      openConfirmDialog(
+        'Reset Demo Data?',
+        'This will restore the original 6 TwinCakes menu items and 2 starter orders. Your custom edits and saved receipts will be cleared.',
+        () => {
+          localStorage.removeItem(STORAGE_KEY);
+          appState.cart = [];
+          loadAppState();
+          renderCategoryPills();
+          renderMenuGrid();
+          renderReceiptTally();
+          updateNavHistoryBadge();
+          updateReceiptClock();
+          if (appState.activeView === 'history') renderHistoryView();
+          showToast('TwinCakes demo data restored!');
+        }
+      );
+    }
+
+    // =========================================================================
+    // 12. INITIALIZATION ON DOMCONTENTLOADED
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+      // Inject TwinCakes custom inline SVG logo into header, receipt tape, and modal
+      const headerLogo = document.getElementById('header-logo-slot');
+      const receiptLogo = document.getElementById('receipt-header-logo-slot');
+      const modalLogo = document.getElementById('modal-receipt-logo-slot');
+      if (headerLogo) headerLogo.innerHTML = getTwinCakesLogoSVG('#141112');
+      if (receiptLogo) receiptLogo.innerHTML = getTwinCakesLogoSVG('#141112');
+      if (modalLogo) modalLogo.innerHTML = getTwinCakesLogoSVG('#141112');
+
+      // Hook confirmation dialog proceed button
+      const confirmBtn = document.getElementById('confirm-proceed-btn');
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', () => {
+          if (typeof _onConfirmAction === 'function') {
+            _onConfirmAction();
+          }
+          closeConfirmDialog();
+        });
+      }
+
+      loadAppState();
+      renderCategoryPills();
+      renderMenuGrid();
+      renderReceiptTally();
+      updateNavHistoryBadge();
+      updateReceiptClock();
+      setInterval(updateReceiptClock, 15000);
+    });
+  </script>
+</body>
+</html>

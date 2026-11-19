@@ -105,28 +105,53 @@
 
     /* Thermal Print Styles */
     @media print {
-      body * {
-        visibility: hidden;
-      }
-      #printable-receipt-sheet,
-      #printable-receipt-sheet * {
-        visibility: visible;
-      }
-      #printable-receipt-sheet {
-        position: fixed;
-        left: 0;
-        top: 0;
-        width: 80mm;
-        padding: 8px;
-        box-shadow: none !important;
-      }
-      .no-print {
-        display: none !important;
-      }
-    }
-  </style>
-</head>
-<body class="min-h-screen flex flex-col">
+  @page {
+    margin: 6mm;
+  }
+
+  header,
+  main,
+  #add-product-modal,
+  .receipt-edge-top,
+  .receipt-edge-bottom,
+  .no-print {
+    display: none !important;
+  }
+
+  html,
+  body {
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+
+  #receipt-preview-modal {
+    display: block !important;
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  #printable-receipt-sheet {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 4px !important;
+    font-family: "Courier Prime", ui-monospace, monospace !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    color: #1c1917 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+}
 
   <!-- ===================================================================== -->
   <!-- PASTEL PINK TOP NAVIGATION BAR WITH TWINCAKES TWINS LOGO              -->

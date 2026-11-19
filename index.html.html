@@ -104,30 +104,30 @@
     }
 
     /* Thermal Print Styles */
-   @media print {
+  @media print {
   @page {
     margin: 4mm;
   }
-  body {
+
+  html, body {
+    width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #fff !important;
   }
-  /* Replace .receipt or #receipt with your actual receipt container class/ID */
-  .receipt, #receipt {
+
+  #printable-receipt-sheet {
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 auto !important;
     box-shadow: none !important;
+    overflow: visible !important;
   }
 
-      .no-print {
-        display: none !important;
-      }
-    }
-  </style>
-</head>
-<body class="min-h-screen flex flex-col">
+  .no-print {
+    display: none !important;
+  }
+}
 
   <!-- ===================================================================== -->
   <!-- PASTEL PINK TOP NAVIGATION BAR WITH TWINCAKES TWINS LOGO              -->
